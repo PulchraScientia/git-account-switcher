@@ -6,6 +6,31 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
+# 스크립트 시작 부분에 추가
+is_colab() {
+    if [ -f "/content/sample_data/README.md" ]; then
+        return 0  # Colab 환경
+    else
+        return 1  # 일반 환경
+    fi
+}
+
+# Colab 환경 설정
+if is_colab; then
+    echo "Colab 환경이 감지되었습니다. 추가 설정을 적용합니다..."
+    
+    # SSH 디렉토리 권한 설정
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    
+    # 필요한 패키지 설치
+    apt-get update > /dev/null 2>&1
+    apt-get install -y openssh-client > /dev/null 2>&1
+    
+    # git 설정
+    git config --global core.sshCommand "ssh -o StrictHostKeyChecking=no"
+fi
+
 # SSH 설정 디렉토리 및 파일 확인/생성
 setup_ssh_directory() {
     echo -e "\n${YELLOW}SSH 디렉토리 및 설정 파일 준비중...${NC}"
@@ -27,6 +52,17 @@ setup_ssh_directory() {
         touch "$HOME/.ssh/config"
         chmod 600 "$HOME/.ssh/config"
     fi
+
+    # known_hosts 파일 생성
+    if [ ! -f "$HOME/.ssh/known_hosts" ]; then
+        touch "$HOME/.ssh/known_hosts"
+        chmod 600 "$HOME/.ssh/known_hosts"
+    fi
+
+    # Enterprise GitHub 호스트 키 미리 추가
+    ssh-keyscan -t ecdsa github.ecodesamsung.com >> "$HOME/.ssh/known_hosts"
+    # 일반 GitHub 호스트 키 미리 추가
+    ssh-keyscan -t ecdsa github.com >> "$HOME/.ssh/known_hosts"
 }
 
 # SSH config 템플릿 생성
@@ -110,6 +146,22 @@ setup_github_account() {
     else
         echo -e "\n${YELLOW}GitHub.com 연결 테스트 중...${NC}"
         ssh -T "git@github.com-$account"
+    fi
+
+    if [ ! -f "$key_file" ]; then
+        echo -e "\n${YELLOW}SSH 키 생성 중...${NC}"
+        # -N "" 옵션으로 패스프레이즈 없이 생성
+        ssh-keygen -t ed25519 -C "$email" -f "$key_file" -N ""
+    fi
+
+    # 연결 테스트 시 옵션 추가
+    if [ "$type" == "Enterprise" ]; then
+        echo -e "\n${YELLOW}Enterprise GitHub 연결 테스트 중...${NC}"
+        # StrictHostKeyChecking=no 옵션 추가
+        ssh -o StrictHostKeyChecking=no -T git@github.ecodesamsung.com
+    else
+        echo -e "\n${YELLOW}GitHub.com 연결 테스트 중...${NC}"
+        ssh -o StrictHostKeyChecking=no -T "git@github.com-$account"
     fi
 }
 
